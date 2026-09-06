@@ -10,9 +10,20 @@ _pac_root() {
 }
 
 # Install packages that are not already present. Never a partial upgrade.
+# pacman -Q is unprivileged, so a no-op (everything already installed)
+# does not need sudo.
 pacman_needed() {
   (( $# > 0 )) || fail "pacman_needed: no packages given"
-  _pac_root pacman -S --needed --noconfirm "$@"
+  local missing=() p
+  for p in "$@"; do
+    pacman -Q "$p" >/dev/null 2>&1 || missing+=("$p")
+  done
+  if ((${#missing[@]} == 0)); then
+    say "already installed: $*"
+    return 0
+  fi
+  say "installing: ${missing[*]}"
+  _pac_root pacman -S --needed --noconfirm "${missing[@]}"
 }
 
 # Uncomment the [multilib] stanza in /etc/pacman.conf if it is still hashed

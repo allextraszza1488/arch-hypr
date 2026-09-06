@@ -1,0 +1,63 @@
+-- MOVEMENT --
+h j k l           left/down/up/right
+w b               next/prev word start
+e ge              next/prev word end
+0 ^ $             line start/first-non-blank/end
+gg G              file start/end
+{N}G  :N          go to line N
+{ }               prev/next paragraph
+% (on bracket)    matching bracket
+Ctrl-d/u          half page down/up
+Ctrl-f/b          full page down/up
+zz zt zb          center/top/bottom current line
+
+-- INSERT --
+i a               insert before/after cursor
+I A               insert at line start/end
+o O               new line below/above + insert
+cw ciw caw        change word/inner word/a word
+ci( ci" ci{       change inside ()/""/{}
+
+-- EDITING --
+x X               delete char under/before cursor
+dd  {N}dd         delete line(s)
+yy  {N}yy         yank (copy) line(s)
+p P               paste after/before
+u  Ctrl-r         undo/redo
+.                 repeat last change
+J                 join line below to current
+>>  <<            indent/unindent line
+== gg=G           reindent line / whole file
+
+-- VISUAL --
+v V Ctrl-v        char/line/block visual mode
+gv                reselect last visual selection
+> <               indent/unindent selection
+
+-- SEARCH/REPLACE --
+/pattern  ?pattern    search forward/backward
+n N                   next/prev match
+:%s/old/new/g         replace all in file
+:%s/old/new/gc        replace all, confirm each
+
+-- WINDOWS/BUFFERS --
+:sp  :vsp             horizontal/vertical split
+Ctrl-w hjkl           move between splits
+:bn :bp               next/prev buffer
+:ls                   list buffers
+
+-- THIS CONFIG SPECIFICALLY (leader = Space) --
+gd              go to definition (clangd/lua_ls)
+<leader>d       show diagnostic under cursor
+]d  [d          next/prev diagnostic
+<leader>D       list all diagnostics (quickfix)
+<leader>f       format file (clangd -> clang-format)
+<leader>e       toggle file tree (netrw, docked bottom)
+<leader>r       run makefile (bottom split); creates one from a gcc template if missing
+<leader>g       run debug script (gdb, bottom split); creates one if missing
+-- nvim 0.11+ built-in LSP defaults, still active, not overridden here --
+K               hover docs
+grn             rename symbol
+gra             code action
+grr             references
+gri             implementation

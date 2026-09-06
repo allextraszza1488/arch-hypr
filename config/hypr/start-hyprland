@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# The wrapper bootstrap.sh has been telling you to use.
+# It did not exist before 2026-09-03 — the name appeared only inside a warn()
+# string, so following that advice gave you "command not found".
+#
+# Bare `Hyprland` from a TTY starts a compositor with no D-Bus session bus and
+# no systemd user session. Portals (screen sharing, file pickers) and mako then
+# either fail silently or never get activated. dbus-run-session fixes that.
+#
+# It then hands off to /usr/bin/start-hyprland (Hyprland's own watchdog binary,
+# which this script shadows in PATH) -- see the comment above the exec below.
+#
+# Put this on PATH (bootstrap links it into ~/.local/bin) and run:  start-hyprland
+set -euo pipefail
+
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=Hyprland
+export XDG_SESSION_DESKTOP=Hyprland
+
+# NVIDIA-only, and this config is shared with an AMD laptop. Not actually
+# "harmless otherwise": LIBVA_DRIVER_NAME=nvidia on an AMD box makes libva go
+# looking for a driver that isn't installed and breaks VA-API video decode,
+# rather than being ignored. So gate it on the card actually being present.
+if lspci 2>/dev/null | grep -qi 'vga.*nvidia'; then
+    export LIBVA_DRIVER_NAME=nvidia
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+fi
+
+# Hand off to Hyprland's OWN start-hyprland (/usr/bin/start-hyprland, shipped
+# by the hyprland package since 0.56) rather than exec'ing bare Hyprland.
+#
+# The name collision is the whole point of this comment: this script is linked
+# into ~/.local/bin as "start-hyprland" too, and ~/.local/bin comes first in
+# PATH, so typing `start-hyprland` reaches THIS file and the upstream binary
+# never ran. Hyprland noticed and logged, every single boot:
+#     WARN: Hyprland is being launched without start-hyprland.
+# plus its red Error Overlay -- which looked like this wrapper failing, when
+# in fact it was this wrapper succeeding at the wrong thing.
+#
+# They are not redundant. Upstream's is a watchdog: it supervises Hyprland and
+# brings it back rather than dumping you at a TTY if the compositor dies.
+# This one sets XDG_* and the D-Bus session, which the watchdog does not.
+# So: keep both, ours first, its own binary last.
+#
+# Absolute path, never the bare name -- the bare name resolves back to this
+# script through PATH and forks a self-recursion bomb.
+# Args after `--` go to Hyprland (so `start-hyprland --safe-mode` still works).
+UPSTREAM=/usr/bin/start-hyprland
+
+if [ ! -x "$UPSTREAM" ]; then
+    # Packaged binary gone (older hyprland, or a non-Arch box sharing this
+    # config): fall back to the old behaviour instead of failing to start.
+    echo "start-hyprland: $UPSTREAM missing, launching Hyprland directly" >&2
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+        exec dbus-run-session -- Hyprland "$@"
+    fi
+    exec Hyprland "$@"
+fi
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    exec dbus-run-session -- "$UPSTREAM" -- "$@"
+else
+    exec "$UPSTREAM" -- "$@"
+fi

@@ -1,0 +1,58 @@
+-- FILES/DIRS --
+ls -lah              list, human sizes, hidden files (or: ll / la, aliased to eza)
+find . -iname '*x*'  find by name (or: fd x)
+du -sh *             size of each item here
+df -h                disk free space per filesystem
+stat file            detailed file metadata
+file file            what kind of file it actually is
+ln -s target link    symlink
+chmod 750 path        rwx for owner/group, none for others
+chown user:group path change ownership
+
+-- SEARCH/TEXT --
+rg pattern           fast recursive grep (ripgrep, installed)
+grep -rn pattern .   classic recursive grep with line numbers
+sed 's/old/new/g'    stream text replace
+awk '{print $1}'     column extraction
+jq '.field'          JSON query (installed)
+diff -u a b          unified diff of two files
+
+-- PROCESSES --
+btop                 interactive process/resource monitor (installed, bound CTRL+ALT+DEL)
+ps aux | grep name   find a process
+kill -TERM pid       ask a process to exit
+kill -KILL pid       force-kill (last resort)
+pkill -f pattern     kill by matching command line
+
+-- SYSTEMD --
+systemctl status u       is a service running
+systemctl --user status u   same, for your user session
+journalctl -u u -f       live-follow a service's logs
+journalctl -b -p err    this boot's errors only
+systemctl list-timers   what's scheduled and when
+
+-- PACMAN (this machine) --
+pacman -Syu              full system update (never partial-upgrade with -Sy alone)
+pacman -Qs name           search installed packages
+pacman -Ss name           search all repos
+pacman -Qi name           info on an installed package
+pacman -Rns name          remove a package + its now-unneeded deps
+paccache -r               prune old cached package versions (timer already runs weekly)
+arch-audit                check installed packages against known CVEs
+
+-- BTRFS/SNAPSHOTS (already set up on this machine) --
+sudo snapper -c root list                 list snapshots
+sudo snapper -c root create -d "note"     take one manually
+sudo snapper -c root delete NUM           remove one
+-- boot into any snapshot from the GRUB menu, "Arch Linux snapshots" submenu --
+
+-- NETWORK --
+ip a                 interfaces + addresses
+nmcli device status  NetworkManager device states
+ss -tulpn            listening ports (needs root for full output)
+curl -I url          headers only, quick reachability check
+
+-- DISK/HARDWARE --
+lsblk -f              block devices + filesystems + mountpoints
+nvidia-smi            GPU status/utilization
+sensors                temperatures (needs lm_sensors)

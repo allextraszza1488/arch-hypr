@@ -1,0 +1,7 @@
+# Runtime state, not source -- overwritten by toggle-look.sh or generated
+# by hyprpaper itself. See ../../docs/README.md for the source/state split.
+look-state.lua
+current-look
+hyprpaper.conf
+# Installed from host/<name>/hypr/host.lua when --host is passed.
+host.lua

@@ -1,0 +1,42 @@
+SUPER + Return              open terminal (kitty)
+SUPER + Q                   close window
+SUPER + B                   open browser (firefox)
+SUPER + D                   app launcher (fuzzel)  ($mod+A is free)
+SUPER + N                   file manager, tiled (yazi in kitty)
+SUPER + F                   vim file manager (netrw tree + terminal + preview), floating + pinned
+SUPER + M                   maximize
+SUPER + SHIFT + F           true fullscreen
+SUPER + V                   toggle floating
+SUPER + P                   toggle pseudotile (this window only)
+SUPER + E                   toggle split orientation (dwindle)
+SUPER + C                   center floating window
+SUPER + Tab                 window switcher (fuzzel list)
+SUPER + S                   toggle scratchpad (dropdown terminal)
+SUPER + CTRL + S            move focused window to scratchpad
+SUPER + SHIFT + P           power menu (logout/reboot/shutdown -- suspend removed, hard-hang risk, see fix-suspend-hang.sh)
+SUPER + SHIFT + /           this cheatsheet
+SUPER + SHIFT + A           shortcuts hub (keybinds / linux commands / vim cheatsheet)
+SUPER + SHIFT + R           reload Hyprland config
+CTRL + ALT + Delete         open btop (process monitor)
+
+-- focus / move / resize (arrows == hjkl, same action, pick either) --
+SUPER + hjkl / arrows              move focus
+SUPER + SHIFT + hjkl / arrows      move window (swap with neighbour)
+SUPER + CTRL + hjkl / arrows       resize window (repeats while held)
+SUPER + R                          enter resize submap (arrows/hjkl drag
+                                   the right/bottom edge, +SHIFT the
+                                   left/top edge; Escape or Return to leave)
+
+-- workspaces --
+SUPER + 1..9                SUPER + 1..9        switch to workspace N
+SUPER + SHIFT + 1..9        move window to workspace N
+SUPER + [ / ]               step to prev/next existing workspace
+SUPER + scroll               step to prev/next existing workspace
+
+-- screenshots --
+SUPER + SHIFT + S           region screenshot (also: SUPER + SHIFT + Print)
+Print                       full screenshot
+(both save to ~/Pictures/Screenshots, path auto-copied to clipboard)
+
+-- media (works even when locked) --
+XF86AudioRaiseVolume / Lower / Mute

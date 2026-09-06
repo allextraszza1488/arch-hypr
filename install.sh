@@ -44,8 +44,7 @@ usage: $0 [options]
   --undo            restore every file recorded in \$MANIFEST_FILE
   -h, --help        this text
 
-Do not run as root. v1 prints the plan and stubs the actions; modules/ and
-config/ land in a later pass.
+Do not run as root. Modules sudo internally when they touch /etc or pacman.
 EOF
 }
 
@@ -198,7 +197,65 @@ do_undo() {
   say "undo complete"
 }
 
-# --- v1 module bodies: real detection, stubbed actions --------------------
+# --- helpers for real module bodies ----------------------------------------
+
+same_file() {
+  [[ -e "$1" && -e "$2" && "$1" -ef "$2" ]]
+}
+
+# Copy $1 -> $2. Skip if they already resolve to the same inode (self-link
+# when this repo IS ~/.config) or if contents already match.
+install_file() {
+  local src=$1 dest=$2
+  mkdir -p "$(dirname -- "$dest")"
+  if [[ -e "$dest" || -L "$dest" ]]; then
+    if same_file "$src" "$dest"; then
+      say "skip (same file): $dest"
+      return 0
+    fi
+    if [[ -f "$src" || -L "$src" ]] && [[ -f "$dest" || -L "$dest" ]] \
+       && cmp -s -- "$src" "$dest"; then
+      say "skip (identical): $dest"
+      return 0
+    fi
+  fi
+  cp -a -- "$src" "$dest"
+  say "copied $src -> $dest"
+}
+
+install_link() {
+  local src=$1 dest=$2
+  mkdir -p "$(dirname -- "$dest")"
+  if [[ -e "$dest" || -L "$dest" ]]; then
+    if same_file "$src" "$dest"; then
+      say "skip (same file): $dest"
+      return 0
+    fi
+  fi
+  ln -sfn -- "$src" "$dest"
+  say "linked $dest -> $src"
+}
+
+# Recurse files and symlinks under $1 into $2, using install_file.
+install_tree() {
+  local src=$1 dest=$2
+  local f rel
+  [[ -d "$src" ]] || return 0
+  while IFS= read -r -d '' f; do
+    rel="${f#"$src"/}"
+    install_file "$f" "$dest/$rel"
+  done < <(find "$src" \( -type f -o -type l \) -print0)
+}
+
+enable_now() {
+  local unit=$1
+  if systemctl is-enabled --quiet "$unit" 2>/dev/null; then
+    say "$unit already enabled"
+    return 0
+  fi
+  say "enable --now $unit"
+  sudo systemctl enable --now "$unit"
+}
 
 run_00_preflight() {
   say "00-preflight (detect only)"
@@ -206,15 +263,21 @@ run_00_preflight() {
   echo "  root_device=$(root_device)"
   echo "  root_fs=$(detect_root_fs)  bootloader=$(detect_bootloader)  chassis=$(detect_chassis)"
   echo "  nproc=$(detect_nproc)  nvidia=$(_bool has_nvidia) amd=$(_bool has_amd) intel=$(_bool has_intel)"
-  echo "  would refuse_foreign_disk on anything other than $(root_device)"
+  echo "  refuse_foreign_disk on anything other than $(root_device)"
   if [[ -n "$HOST" ]]; then
-    echo "  --host $HOST (would apply host profile)"
+    echo "  --host $HOST (apply host overlay from host/$HOST if present)"
   fi
 }
 
 run_10_hypr_stack() {
   say "10-hypr-stack"
-  echo "  would pacman_needed: hyprland xdg-desktop-portal-hyprland waybar hyprpaper imv lua jq libnotify fuzzel mako grim slurp wl-clipboard yazi pipewire pipewire-pulse wireplumber noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd firefox kitty"
+  local pkgs=(
+    hyprland xdg-desktop-portal-hyprland waybar hyprpaper imv lua jq libnotify
+    fuzzel mako grim slurp wl-clipboard yazi pipewire pipewire-pulse wireplumber
+    noto-fonts noto-fonts-emoji ttf-jetbrains-mono-nerd firefox kitty
+  )
+  say "pacman_needed: ${pkgs[*]}"
+  pacman_needed "${pkgs[@]}"
 }
 
 run_20_gpu() {
@@ -233,23 +296,89 @@ run_20_gpu() {
     echo "  intel: mesa + vulkan-intel"
   fi
   if ((${#pkgs[@]} == 0)); then
-    echo "  no PCI [0300]/[0302] GPU detected — would skip driver packages"
+    say "no PCI [0300]/[0302] GPU detected — skipping driver packages"
     return 0
   fi
-  echo "  would pacman_needed: ${pkgs[*]}"
+  say "pacman_needed: ${pkgs[*]}"
+  pacman_needed "${pkgs[@]}"
 }
 
 run_30_dots() {
   say "30-dots"
-  echo "  would copy/link hyprland.lua, kitty, fish, waybar, fuzzel, mako into $(real_home)/.config"
-  echo "  would link start-hyprland into $(real_home)/.local/bin"
-  echo "  (config/ is not in this skeleton yet)"
+  local dest_cfg dest_bin src_cfg name
+  dest_cfg="$(real_home)/.config"
+  dest_bin="$(real_home)/.local/bin"
+  src_cfg="$ROOT/config"
+
+  [[ -d "$src_cfg" ]] || fail "config/ missing at $src_cfg"
+
+  mkdir -p "$dest_cfg" "$dest_bin"
+
+  for name in "$src_cfg"/*; do
+    [[ -e "$name" ]] || continue
+    if [[ -d "$name" ]]; then
+      install_tree "$name" "$dest_cfg/$(basename -- "$name")"
+    else
+      install_file "$name" "$dest_cfg/$(basename -- "$name")"
+    fi
+  done
+
+  if [[ -n "$HOST" ]]; then
+    local overlay="$ROOT/host/$HOST"
+    if [[ ! -d "$overlay" ]]; then
+      fail "unknown host profile: $HOST (expected $overlay)"
+    fi
+    if [[ -d "$overlay/hypr" ]]; then
+      say "applying host overlay $HOST -> $dest_cfg/hypr"
+      install_tree "$overlay/hypr" "$dest_cfg/hypr"
+    fi
+  fi
+
+  if [[ -x "$dest_cfg/hypr/start-hyprland" ]]; then
+    install_link "$dest_cfg/hypr/start-hyprland" "$dest_bin/start-hyprland"
+  elif [[ -x "$src_cfg/hypr/start-hyprland" ]]; then
+    install_link "$src_cfg/hypr/start-hyprland" "$dest_bin/start-hyprland"
+  else
+    warn "start-hyprland not found — not linking into $dest_bin"
+  fi
+
+  # Scripts live in ~/.config/scripts (hyprland.lua calls them there) and
+  # also on PATH: screenshot-watch.service ExecStart=%h/.local/bin/...
+  local s
+  if [[ -d "$dest_cfg/scripts" ]]; then
+    for s in "$dest_cfg/scripts"/*.sh; do
+      [[ -e "$s" ]] || continue
+      chmod +x "$s"
+      install_link "$s" "$dest_bin/$(basename -- "$s")"
+    done
+    if [[ -f "$dest_cfg/scripts/screenshot-watch.service" ]]; then
+      install_link "$dest_cfg/scripts/screenshot-watch.service" \
+        "$dest_cfg/systemd/user/screenshot-watch.service"
+    fi
+  fi
 }
 
 run_40_look() {
   say "40-look"
-  echo "  would seed $(real_home)/.config/hypr/look-state.lua from looks/alpenflage.lua"
-  echo "  would write current-look marker (hyprland.lua dofile()s look-state at parse time)"
+  local dest_state dest_marker src
+  dest_state="$(real_home)/.config/hypr/look-state.lua"
+  dest_marker="$(real_home)/.config/hypr/current-look"
+  src="$ROOT/config/hypr/looks/alpenflage.lua"
+  [[ -f "$src" ]] || fail "missing look recipe $src"
+
+  if [[ -e "$dest_state" ]]; then
+    say "look-state.lua already exists — not overwriting"
+  else
+    mkdir -p "$(dirname -- "$dest_state")"
+    cp -a -- "$src" "$dest_state"
+    say "seeded $dest_state from looks/alpenflage.lua"
+  fi
+  if [[ -e "$dest_marker" ]]; then
+    say "current-look marker already exists — not overwriting"
+  else
+    printf 'alpenflage\n' > "$dest_marker"
+    say "wrote $dest_marker"
+  fi
 }
 
 run_50_snapshots() {
@@ -258,9 +387,10 @@ run_50_snapshots() {
   fs=$(detect_root_fs)
   boot=$(detect_bootloader)
   echo "  root_fs=$fs  bootloader=$boot  root_device=$(root_device)"
-  echo "  would refuse_foreign_disk $(root_device) before creating subvolumes"
+  refuse_foreign_disk "$(root_device)"
   if [[ "$fs" != btrfs ]]; then
-    echo "  not btrfs — would skip snapper (forced on by --with)"
+    say "not btrfs — skipping snapper (forced on by --with)"
+    return 0
   fi
   pkgs=(snapper snap-pac)
   if [[ "$boot" == *grub* ]]; then
@@ -269,7 +399,33 @@ run_50_snapshots() {
       pkgs+=(linux-lts linux-lts-headers)
     fi
   fi
-  echo "  would pacman_needed: ${pkgs[*]}"
+  say "pacman_needed: ${pkgs[*]}"
+  pacman_needed "${pkgs[@]}"
+
+  if [[ -f /etc/snapper/configs/root ]]; then
+    say "snapper config 'root' already exists"
+  else
+    say "snapper -c root create-config /"
+    sudo snapper -c root create-config /
+    backup_file /etc/snapper/configs/root
+    sudo sed -i -e "s/^ALLOW_USERS=.*/ALLOW_USERS=\"$(real_user)\"/" \
+      /etc/snapper/configs/root
+  fi
+
+  enable_now snapper-timeline.timer
+  enable_now snapper-cleanup.timer
+
+  if [[ "$boot" == *grub* ]]; then
+    local unit
+    unit=$(systemctl list-unit-files --no-legend 'grub-btrfsd*' | awk '{print $1}' | head -1)
+    if [[ -n "$unit" ]]; then
+      enable_now "$unit"
+    else
+      warn "no grub-btrfsd unit found — snapshot boot entries only after grub-mkconfig"
+    fi
+  else
+    say "bootloader is $boot — not enabling grub-btrfsd"
+  fi
 }
 
 run_60_suspend() {
@@ -289,9 +445,47 @@ run_60_suspend() {
 
 run_70_tuning() {
   say "70-tuning"
-  echo "  would set MAKEFLAGS=-j$(detect_nproc) in /etc/makepkg.conf (backup_file first)"
-  echo "  would pacman_needed: pacman-contrib reflector"
-  echo "  would enable paccache.timer and reflector.timer"
+  local n conf rconf overlay
+  n=$(detect_nproc)
+  conf=/etc/makepkg.conf
+  if grep -Eq "^MAKEFLAGS=\"-j${n}\"" "$conf"; then
+    say "MAKEFLAGS already -j${n}"
+  else
+    say "set MAKEFLAGS=-j${n} in $conf"
+    backup_file "$conf"
+    if grep -q '^MAKEFLAGS=' "$conf"; then
+      sudo sed -i "s/^MAKEFLAGS=.*/MAKEFLAGS=\"-j${n}\"/" "$conf"
+    elif grep -q '^#MAKEFLAGS=' "$conf"; then
+      sudo sed -i "s/^#MAKEFLAGS=.*/MAKEFLAGS=\"-j${n}\"/" "$conf"
+    else
+      printf 'MAKEFLAGS="-j%s"\n' "$n" | sudo tee -a "$conf" >/dev/null
+    fi
+  fi
+
+  say "pacman_needed: pacman-contrib reflector"
+  pacman_needed pacman-contrib reflector
+
+  enable_now paccache.timer
+
+  rconf=/etc/xdg/reflector/reflector.conf
+  overlay=""
+  if [[ -n "$HOST" && -f "$ROOT/host/$HOST/reflector.conf" ]]; then
+    overlay="$ROOT/host/$HOST/reflector.conf"
+  fi
+  if [[ -n "$overlay" ]]; then
+    if [[ -f "$rconf" ]] && cmp -s -- "$overlay" "$rconf"; then
+      say "reflector.conf already matches host overlay"
+    else
+      say "install reflector.conf from host/$HOST"
+      [[ -f "$rconf" ]] && backup_file "$rconf"
+      sudo mkdir -p "$(dirname -- "$rconf")"
+      sudo cp -- "$overlay" "$rconf"
+    fi
+  else
+    say "no host overlay for reflector --country; leaving $rconf as-is"
+  fi
+
+  enable_now reflector.timer
 }
 
 run_80_security() {
@@ -392,5 +586,4 @@ for m in "${PLAN[@]}"; do
   run_module "$m"
 done
 
-say "v1 skeleton: no packages installed, no files copied"
-say "next pass: modules/ and config/"
+say "done"

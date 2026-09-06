@@ -1,0 +1,1 @@
+../assets/art.ascii.txt

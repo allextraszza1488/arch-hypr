@@ -1,7 +1,10 @@
 # arch-hypr
 
-Portable Arch + Hyprland installer. Skeleton only: `install.sh` + `lib/`
-are here; `modules/` and `config/` come in a later pass.
+Portable Arch + Hyprland installer. `install.sh` probes the machine and
+runs the module plan for real: packages via `pacman_needed`, dots from
+`config/`, snapper/makepkg/reflector with `backup_file` before any `/etc`
+edit. Host-specific bits (monitor pin, reflector `--country`) live under
+`host/<name>/` and are applied only with `--host`.
 
 Do not run as root. `install.sh` refuses uid 0 — rerun as yourself; the
 modules sudo internally when they touch `/etc` or pacman.
@@ -31,8 +34,8 @@ laptops. Vendors: NVIDIA `10de`, AMD `1002`, Intel `8086`.
 ## Installer flags
 
 ```bash
-./install.sh                  # print the module plan, stub the actions
-./install.sh --host NAME      # host profile (laptop / desktop / hostname)
+./install.sh                  # run the default module plan
+./install.sh --host NAME      # host overlay (e.g. f3nt-desktop)
 ./install.sh --with steam,snapshots
 ./install.sh --without steam,suspend
 ./install.sh --undo           # restore every file recorded in the manifest
@@ -56,8 +59,12 @@ Default plan, in order:
 | `80-security` | always |
 | `90-steam` | always |
 
-`--with` forces a skipped module back on; `--without` drops one. v1 only
-echoes what it *would* `pacman -S` / copy.
+`--with` forces a skipped module back on; `--without` drops one.
+
+Shared dots live in `config/` (hypr, kitty, fish, waybar, fuzzel, nvim,
+scripts, …). `config/hypr/hyprland.lua` `pcall(dofile)`s
+`~/.config/hypr/host.lua`; that file is installed from `host/<name>/`
+when `--host` is set, and is simply missing otherwise (no monitor pin).
 
 ## Undo
 
@@ -66,7 +73,4 @@ original path to `$MANIFEST_FILE` (default
 `~/.local/state/arch-hypr/manifest.txt`). `--undo` reads that manifest
 and restores every `.bak`.
 
-## Later
-
-`modules/` (real bodies for the nine steps) and `config/` (Hyprland Lua,
-looks, kitty, fish) are not in this pass.
+60-suspend, 80-security, and 90-steam still print the plan only.

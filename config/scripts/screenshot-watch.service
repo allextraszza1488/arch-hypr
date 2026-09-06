@@ -1,0 +1,9 @@
+[Unit]
+Description=Copy newest screenshot path to clipboard
+
+[Service]
+ExecStart=%h/.local/bin/screenshot-watch.sh
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

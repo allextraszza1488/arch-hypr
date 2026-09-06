@@ -1,0 +1,52 @@
+// Minimal, click-free by design: volume + a fixed string + clock. No tray, no
+// power/menu buttons -- the bar stays purely informational and never requires
+// a mouse to use this desktop.
+//
+// This comment used to also name bluetooth-menu.sh and wifi-menu.sh as
+// keybinds. Neither script has ever existed and neither was ever bound, so
+// the claim was describing a system slightly larger than the one on disk.
+// power-menu.sh is real (SUPER+SHIFT+P). Bluetooth and wi-fi currently have
+// NO keyboard path at all -- the one genuine gap in keyboard-only operation.
+{
+  "layer": "top",
+  "position": "top",
+  "height": 30,
+  "spacing": 4,
+
+  // hyprland/workspaces removed on purpose: its format-icons were empty
+  // strings, so it drew five blank-but-still-clickable buttons -- invisible
+  // hitboxes eating space on the left for no visual information at all.
+  "modules-left": ["wireplumber"],
+  "modules-center": ["custom/vanity"],
+  "modules-right": ["clock"],
+
+  // A fixed vanity string, not a window indicator -- deliberately a custom
+  // module rather than hyprland/window with a static format, because that
+  // module ellipsizes to its title allocation and clipped this to
+  // "...have a gu…" once the blackletter + wide letter-spacing was applied.
+  // interval 0 = run once at startup and never again; the text never changes.
+  // No max-length on purpose: in waybar that option turns ON GTK ellipsize
+  // mode, which is what was clipping this to "...have a g…".
+  "custom/vanity": {
+    "exec": "echo 'Im schisophrenic and have a gun'",
+    "interval": 0
+  },
+
+  // wireplumber, not pulseaudio: WirePlumber is the actual session manager
+  // here and it's the same backend the wpctl volume keybinds talk to, so the
+  // bar and the keys can't disagree. "vol" spelled out rather than an icon --
+  // blackletter has no glyph for a speaker icon, and letters are the whole
+  // point of using this font at all.
+  "wireplumber": {
+    "format": "vol {volume}",
+    "format-muted": "muted"
+  },
+
+  "clock": {
+    // %a (day name) added so the gothic clock font actually has letters to
+    // render -- pure digits/punctuation don't show blackletter styling at
+    // all, confirmed by screenshot before making this change.
+    "format": "{:%a %Y-%m-%d  %H:%M}",
+    "tooltip-format": "{:%A, %d %B %Y}"
+  }
+}

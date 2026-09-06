@@ -1,0 +1,3 @@
+# Runtime state -- toggle-look.sh copies looks/<active>.conf over this on
+# every toggle. Not something you'd hand-edit directly.
+active-look.conf

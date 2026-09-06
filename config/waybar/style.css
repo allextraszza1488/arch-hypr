@@ -1,0 +1,65 @@
+/* Transparent bar. Bright/vibrant accents pulled from the same hues as the
+   Hyprland border gradient (dark red 9d2b32, dark green 3a4d39) but
+   saturated up so they actually read against a busy camo wallpaper --
+   bigger text, more breathing room between modules than before. */
+* {
+  font-family: "JetBrainsMono Nerd Font", sans-serif;
+  font-size: 16px;
+  min-height: 0;
+}
+
+window#waybar {
+  /* Faint dark tint rather than fully transparent, so the bar reads as its
+     own strip against the wallpaper instead of text floating in space. Kept
+     low -- a literal 1% (0.01) is ~2 of 255 and invisible in practice, so
+     this is the smallest value that actually registers as a tint. */
+  background-color: rgba(0, 0, 0, 0.10);
+  color: #e8dcc4;
+}
+
+/* The three blackletter modules. Green (not red) for all of them: the camo
+   wallpaper is mostly olive and rust, so red text sits too close to the
+   background to read, while this yellow-green separates cleanly from both.
+   font-weight stays 400 everywhere -- UnifrakturMaguntia ships no real bold
+   and letting GTK synthesize one just smears the strokes. */
+#custom-vanity,
+#clock,
+#wireplumber {
+  /* Red. Bright enough to survive the outline below, which puts black on
+     both sides of every stroke -- a darker red (the 9d2b32 of the border
+     gradient, say) just reads as black text at this stroke weight. */
+  color: #e04a42;
+  font-family: "UnifrakturMaguntia", "JetBrainsMono Nerd Font", sans-serif;
+  font-weight: 400;
+  /* Faux outline, not a drop shadow: four hard 1px offsets in every diagonal
+     with no blur radius ring the glyphs on all sides, which is what actually
+     separates thin blackletter strokes from a busy wallpaper. A single soft
+     shadow only darkens one edge and the strokes still disappear over the
+     dark patches of the camo. */
+  text-shadow:
+     1px  1px 0 rgba(0, 0, 0, 0.95),
+    -1px -1px 0 rgba(0, 0, 0, 0.95),
+     1px -1px 0 rgba(0, 0, 0, 0.95),
+    -1px  1px 0 rgba(0, 0, 0, 0.95);
+}
+
+#wireplumber {
+  /* 5px in from the left edge. Not zero: at 0 the outline and the blackletter
+     "v" get clipped by the screen edge itself. */
+  padding: 0 14px 0 5px;
+  margin-left: 0;
+  font-size: 19px;     /* 16 + 3 */
+  letter-spacing: 3px;
+}
+
+#custom-vanity {
+  padding: 0 16px;
+  font-size: 19px;      /* 16 + 3 */
+  letter-spacing: 7px;  /* deliberately over-widened, this is the centrepiece */
+}
+
+#clock {
+  padding: 0 18px;
+  font-size: 23px;     /* 20 + 3 -- blackletter reads small for its px size */
+  letter-spacing: 3px; /* widened -- more gap between letters */
+}
