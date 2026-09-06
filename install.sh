@@ -27,6 +27,7 @@ ALL_MODULES=(
 )
 
 HOST=""
+PROFILE=""
 UNDO=0
 WITH=()
 WITHOUT=()
@@ -39,6 +40,7 @@ usage: $0 [options]
   --host NAME       host profile name (laptop/desktop/hostname)
   --with X,Y        force-include modules (name or NN-name)
   --without X,Y     exclude modules
+  --profile NAME    source bootstrap/NAME-profile.sh (e.g. lite)
   --undo            restore every file recorded in \$MANIFEST_FILE
   -h, --help        this text
 
@@ -128,6 +130,15 @@ while [[ $# -gt 0 ]]; do
       done < <(split_csv "${1#*=}")
       shift
       ;;
+    --profile)
+      [[ $# -ge 2 ]] || fail "--profile needs a name"
+      PROFILE=$2
+      shift 2
+      ;;
+    --profile=*)
+      PROFILE=${1#*=}
+      shift
+      ;;
     --undo)
       UNDO=1
       shift
@@ -141,6 +152,19 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$PROFILE" ]]; then
+  pf="$ROOT/bootstrap/${PROFILE}-profile.sh"
+  [[ -f "$pf" ]] || fail "unknown profile: $PROFILE (expected $pf)"
+  # shellcheck source=/dev/null
+  source "$pf"
+  _canon=()
+  for m in "${WITHOUT[@]+"${WITHOUT[@]}"}"; do
+    _canon+=("$(canonical_module "$m")")
+  done
+  WITHOUT=("${_canon[@]+"${_canon[@]}"}")
+  unset _canon
+fi
 
 if [[ "$(id -u)" -eq 0 ]]; then
   fail "do not run as root — rerun as yourself; modules sudo internally"
@@ -239,7 +263,12 @@ run_50_snapshots() {
     echo "  not btrfs — would skip snapper (forced on by --with)"
   fi
   pkgs=(snapper snap-pac)
-  [[ "$boot" == *grub* ]] && pkgs+=(grub-btrfs inotify-tools linux-lts linux-lts-headers)
+  if [[ "$boot" == *grub* ]]; then
+    pkgs+=(grub-btrfs inotify-tools)
+    if [[ "${SKIP_LINUX_LTS:-0}" != 1 ]]; then
+      pkgs+=(linux-lts linux-lts-headers)
+    fi
+  fi
   echo "  would pacman_needed: ${pkgs[*]}"
 }
 
@@ -349,7 +378,7 @@ fi
 
 mapfile -t PLAN < <(plan_modules)
 
-echo "arch-hypr plan${HOST:+ (host=$HOST)}:"
+echo "arch-hypr plan${HOST:+ (host=$HOST)}${PROFILE:+ (profile=$PROFILE)}:"
 if ((${#PLAN[@]} == 0)); then
   echo "  (no modules — everything excluded?)"
   exit 0
