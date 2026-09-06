@@ -15,13 +15,22 @@ fail() { printf '!! %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<EOF
-usage: $0 /dev/sdX
+usage: $0 [--force-self] /dev/sdX
 
 Run from the Arch live ISO as root. Wipes the whole disk, then installs a
 minimal LUKS2+btrfs+systemd-boot Arch base (hostname: archhypr). After
 reboot, log in as the created user and run arch-hypr/install.sh.
 
 Pass the WHOLE disk (e.g. /dev/sdb, /dev/nvme1n1), never a partition.
+
+--force-self  Allow TARGET to be the same disk the live ISO booted from.
+              Only safe if you booted with 'copytoram=y' so the live
+              system is fully RAM-resident (check: findmnt should show
+              /run/archiso/copytoram as a tmpfs). Without copytoram this
+              can crash the live session mid-wipe. Off by default: this
+              script should normally refuse when TARGET is the disk
+              you're running from, since that's almost always a
+              wrong-device typo, not intent.
 EOF
 }
 
@@ -67,7 +76,10 @@ is_mounted_on() {
 }
 
 mounted_under_ok() {
-  # True if every mountpoint of $1 is /mnt or /run/archhypr-* (resume).
+  # True if every mountpoint of $1 is /mnt, /run/archhypr-* (resume), or
+  # /run/archiso/* (the live ISO's own mount of ITS OWN boot disk -- only
+  # possible in --force-self mode, since otherwise TARGET != the boot disk
+  # and would never show these mountpoints at all).
   local dev=$1 mp
   while IFS= read -r mp; do
     [[ -z "$mp" ]] && continue
@@ -78,7 +90,7 @@ mounted_under_ok() {
       p=${p// /}
       [[ -z "$p" || "$p" == "-" ]] && continue
       case "$p" in
-        /mnt|/mnt/*|/run/archhypr-*) ;;
+        /mnt|/mnt/*|/run/archhypr-*|/run/archiso|/run/archiso/*) ;;
         *) return 1 ;;
       esac
     done
@@ -99,8 +111,17 @@ live_iso_disk() {
 
 # ---------- args / preflight ------------------------------------------------
 
+FORCE_SELF=0
+args=()
+for a in "$@"; do
+  case "$a" in
+    -h|--help) usage; exit 0 ;;
+    --force-self) FORCE_SELF=1 ;;
+    *) args+=("$a") ;;
+  esac
+done
+set -- "${args[@]}"
 [[ $# -eq 1 ]] || { usage; exit 1; }
-[[ "$1" != -h && "$1" != --help ]] || { usage; exit 0; }
 
 [[ "$(id -u)" -eq 0 ]] || fail "run as root from the Arch live ISO"
 
@@ -133,7 +154,14 @@ fi
 
 if live=$(live_iso_disk); then
   if [[ "$tname" == "$live" ]]; then
-    fail "$TARGET is the live ISO boot disk — refusing to wipe the installer"
+    if (( FORCE_SELF )); then
+      if ! findmnt -n /run/archiso/copytoram >/dev/null 2>&1; then
+        fail "$TARGET is the live ISO boot disk and copytoram is NOT active — --force-self without copytoram=y at boot would wipe the disk out from under the running live system. Reboot with 'copytoram=y' added at the boot menu first."
+      fi
+      warn "$TARGET is the live ISO boot disk — proceeding because --force-self was passed and copytoram is active"
+    else
+      fail "$TARGET is the live ISO boot disk — refusing to wipe the installer (pass --force-self if you booted with copytoram=y and mean to reuse this same disk)"
+    fi
   fi
 fi
 
